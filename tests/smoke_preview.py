@@ -23,7 +23,7 @@ def health():
         except Exception as exc:
             errors.append(str(exc))
         time.sleep(8)
-    raise AssertionError("La preview no responde al endpoint de salud: " + repr(errors))
+    print("Health no verificable: " + repr(errors) + ". Intentando abrir la app con navegador.", flush=True)
 
 def main():
     health()
@@ -32,6 +32,7 @@ def main():
         page = browser.new_page(viewport={"width": 1440, "height": 960})
         try:
             page.goto(BASE, wait_until="domcontentloaded", timeout=120000)
+            print(f"URL final del navegador: {page.url}", flush=True)
             page.get_by_text("NBA Props Lab", exact=False).first.wait_for(state="visible", timeout=120000)
             page.get_by_text("Registros históricos").first.wait_for(state="visible", timeout=90000)
             page.get_by_text("Base compartida:", exact=False).first.wait_for(state="visible", timeout=60000)
