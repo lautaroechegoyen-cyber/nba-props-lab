@@ -9,3 +9,5 @@ __pycache__/
 .nba_games_*.csv
 data/registro_prospectivo.csv
 data/resultados_*.csv
+node_modules/
+.cache-*.json
