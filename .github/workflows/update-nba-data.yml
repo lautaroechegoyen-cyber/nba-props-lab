@@ -1,0 +1,38 @@
+name: Actualizar estadísticas NBA
+on:
+  workflow_dispatch:
+  schedule:
+    # 13:15 UTC = 10:15 en Buenos Aires (UTC-3).
+    - cron: '15 13 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: nba-shared-data
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Descargar temporada actual y anterior y unir sin borrar el histórico
+        run: python cli.py fetch --output nba_games.csv
+      - name: Verificar CSV
+        run: python cli.py audit --games nba_games.csv
+      - name: Publicar cambios si hay nuevos partidos
+        run: |
+          if git diff --quiet -- nba_games.csv; then
+            echo 'Sin estadísticas nuevas'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add nba_games.csv
+          git commit -m 'data: actualizar game logs NBA'
+          git push

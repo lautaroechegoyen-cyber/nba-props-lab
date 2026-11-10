@@ -1,0 +1,30 @@
+name: Verificar Streamlit preview
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      PREVIEW_URL: https://nba-props-lab-preview.streamlit.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar navegador de pruebas
+        run: |
+          python -m pip install "playwright>=1.55,<2"
+          python -m playwright install --with-deps chromium
+      - name: Verificar aplicación publicada y datos compartidos
+        run: python tests/smoke_preview.py
+      - name: Guardar captura de pantalla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-streamlit-preview
+          path: preview-smoke.png
+          if-no-files-found: ignore

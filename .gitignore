@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+*.pyc
+.env
+.streamlit/secrets.toml
+.nba_games_*.csv
+data/registro_prospectivo.csv
+data/resultados_*.csv
+node_modules/
+.cache-*.json
