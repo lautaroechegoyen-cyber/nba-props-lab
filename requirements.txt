@@ -1,4 +1,4 @@
 numpy>=1.26,<3
 pandas>=2.2,<3
-streamlit>=1.39,<2
+streamlit>=1.50,<2
 nba_api>=1.9,<2

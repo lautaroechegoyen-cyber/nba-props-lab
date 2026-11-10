@@ -7,14 +7,15 @@ from model import normalize_games,normalize_markets,predict_markets,backtest,aud
 from make_demo import generate_demo
 from tracker import append_snapshot,settle_snapshot
 from diagnostics import analyze
+from fetch_nba import current_seasons
 
 
 def main():
     parser=argparse.ArgumentParser(description='NBA Props Lab – proyecciones experimentales')
     sub=parser.add_subparsers(dest='cmd',required=True)
     x=sub.add_parser('fetch',help='Descargar game logs NBA reales')
-    x.add_argument('--seasons',nargs='+',default=['2025-26','2026-27'])
-    x.add_argument('--output',default='data/nba_games.csv')
+    x.add_argument('--seasons',nargs='+',default=None, help='Ej. 2022-23 2023-24; por defecto actual y anterior')
+    x.add_argument('--output',default='nba_games.csv', help='CSV compartido en la raíz de GitHub')
     sub.add_parser('demo',help='Crear datos FICTICIOS para probar')
     x=sub.add_parser('audit'); x.add_argument('--games',required=True)
     for command in ['predict','backtest','track','settle']:
@@ -28,7 +29,7 @@ def main():
         generate_demo();print('Datos demo generados en data/. ATENCIÓN: sintéticos, no NBA real.');return
     if args.cmd=='fetch':
         from fetch_nba import fetch_seasons
-        games,logs=fetch_seasons(args.seasons,args.output)
+        games,logs=fetch_seasons(args.seasons or current_seasons(),args.output)
         print('\n'.join(logs)); print(f'Archivo: {args.output} | filas: {len(games)}');return
     raw=pd.read_csv(args.games,dtype={'PLAYER_ID':str,'GAME_ID':str})
     if args.cmd=='audit':

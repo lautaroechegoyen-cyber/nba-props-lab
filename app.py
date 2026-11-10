@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 from model import (normalize_games, normalize_markets, audit_games,
                    predict_markets,backtest,forecast_player,evaluate_line)
-from fetch_nba import fetch_seasons
+from shared_data import shared_path
 from make_demo import generate_demo
 from diagnostics import analyze
 from tracker import append_snapshot,settle_snapshot
@@ -23,7 +23,8 @@ if not (folder/'games_DEMO_SIMULADO.csv').exists():
 
 with st.sidebar:
     st.header('Configuración')
-    source=st.radio('Origen de los datos',('Demo ficticia','NBA real (CSV guardado)','Subir CSV propio'),index=1 if (folder/'nba_games.csv').exists() else 0)
+    shared_csv = shared_path(root)
+    source=st.radio('Origen de los datos',('Demo ficticia','NBA real (CSV compartido)','Subir CSV propio'),index=1 if shared_csv.exists() else 0)
     ev_pct=st.slider('EV mínimo para marcar selección (%)',0,20,3)
     sims=st.select_slider('Simulaciones por jugador',options=[3000,6000,12000,25000],value=12000)
     st.write('El riesgo por apuesta del backtest es 1 unidad constante.')
@@ -33,19 +34,17 @@ if source=='Demo ficticia':
     path=folder/'games_DEMO_SIMULADO.csv'
     raw=pd.read_csv(path,dtype={'PLAYER_ID':str,'GAME_ID':str})
     st.warning('MODO DEMO: TODOS los nombres, partidos, cuotas y resultados son INVENTADOS. No sirven para apostar.')
-elif source=='NBA real (CSV guardado)':
-    path=folder/'nba_games.csv'
-    if st.button('Importar temporadas NBA desde stats.nba.com'):
-        with st.spinner('Consultando NBA Stats...'):
-            try:
-                _,logs=fetch_seasons(['2025-26','2026-27'],str(path))
-                st.success('Descarga finalizada')
-                st.write('\n'.join(logs))
-            except Exception as e:
-                st.error(f'No se pudo importar automáticamente: {e}. Podés usar un CSV.')
+elif source=='NBA real (CSV compartido)':
+    path=shared_csv
     if not path.exists():
-        st.info('Aún no hay NBA real descargada. Usá el botón de importación o subí un CSV.');st.stop()
-    raw=pd.read_csv(path,dtype={'PLAYER_ID':str,'GAME_ID':str})
+        st.error('No se encuentra nba_games.csv en GitHub. El administrador debe actualizar la base compartida.')
+        st.stop()
+    try:
+        raw=pd.read_csv(path,dtype={'PLAYER_ID':str,'GAME_ID':str})
+    except (OSError, pd.errors.ParserError) as exc:
+        st.error(f'No se pudo leer la base compartida: {exc}')
+        st.stop()
+    st.caption('Base compartida: se carga del CSV publicado con la app. No requiere conexión a stats.nba.com.')
 else:
     upload=st.file_uploader('Subir CSV de partidos',type='csv',key='games')
     if upload is None:
@@ -53,7 +52,7 @@ else:
     raw=pd.read_csv(upload,dtype={'PLAYER_ID':str,'GAME_ID':str})
 
 with st.expander('Revisión de calidad de los datos'):
-    st.dataframe(audit_games(raw),hide_index=True,use_container_width=True)
+    st.dataframe(audit_games(raw),hide_index=True,width='stretch')
 try:
     games=normalize_games(raw)
 except ValueError as exc:
@@ -63,6 +62,17 @@ c1,c2,c3=st.columns(3)
 c1.metric('Registros históricos',f'{len(games):,}')
 c2.metric('Jugadores',games['PLAYER_ID'].nunique())
 c3.metric('Última fecha de datos',str(games['GAME_DATE'].max().date()))
+if source == 'NBA real (CSV compartido)':
+    age = (date.today() - games['GAME_DATE'].max().date()).days
+    if age > 3:
+        st.warning(f'La base compartida está desactualizada ({age} días). '
+                   'El administrador debe ejecutar el actualizador de GitHub Actions. '
+                   'No se descarga información al abrir la app.')
+    with st.expander('Cómo se actualiza la base compartida'):
+        st.write('Los datos se actualizan desde GitHub Actions (automáticamente, o con Run workflow). '
+                 'El administrador puede importar temporadas anteriores con '
+                 '`python cli.py fetch --seasons 2022-23 2023-24 2024-25 2025-26 2026-27`. '
+                 'La API puede bloquear las solicitudes: una actualización fallida mantiene la base anterior.')
 
 st.divider()
 tab_simple,tab_pred,tab_test,tab_help=st.tabs(['🏀 Analizar jugador (fácil)','Proyecciones por CSV','Backtesting cronológico','Instrucciones'])
@@ -94,7 +104,7 @@ with tab_simple:
         cols=['GAME_DATE','MATCHUP','MIN','PTS','REB','AST','FG3M','PRA']
         preview=history[cols].head(10).copy()
         preview['GAME_DATE']=preview['GAME_DATE'].dt.strftime('%Y-%m-%d')
-        st.dataframe(preview,hide_index=True,use_container_width=True)
+        st.dataframe(preview,hide_index=True,width='stretch')
         c1,c2,c3,c4=st.columns(4)
         for col,widget,label in zip(['PTS','REB','AST','FG3M'],[c1,c2,c3,c4],['Puntos','Rebotes','Asistencias','Triples']):
             widget.metric('Media últimos 10: '+label,f'{history[col].head(10).mean():.1f}')
@@ -134,7 +144,7 @@ with tab_simple:
                     st.write('**Valor esperado según las cuotas cargadas**')
                     summary=pd.DataFrame(vals)
                     summary['valor_esperado_%']=summary['ev_unidad']*100
-                    st.dataframe(summary[['lado','probabilidad','cuota_decimal','ventaja_pp','valor_esperado_%']],hide_index=True,use_container_width=True)
+                    st.dataframe(summary[['lado','probabilidad','cuota_decimal','ventaja_pp','valor_esperado_%']],hide_index=True,width='stretch')
                     st.caption('Un EV positivo NO demuestra que exista ventaja real: el modelo todavía no está validado con cuotas históricas.')
                 else:
                     st.info('No escribiste cuotas: se muestran probabilidades y proyección. Podés poner las cuotas arriba y calcular otra vez.')
@@ -157,7 +167,7 @@ with tab_pred:
             good=pred.loc[pred.get('califica',pd.Series(dtype=bool))==True] if not pred.empty else pd.DataFrame()
             st.caption(f'Filas analizadas: {len(pred)} | candidatos que superan umbral/modelo: {len(good)}. La calificación NO es garantía de ventaja real.')
             if not pred.empty:
-                st.dataframe(pred,hide_index=True,use_container_width=True)
+                st.dataframe(pred,hide_index=True,width='stretch')
                 if source!='Demo ficticia':
                     if st.button('Guardar pronósticos en registro prospectivo'):
                         n,dupes=append_snapshot(pred,str(folder/'registro_prospectivo.csv'))
@@ -167,7 +177,7 @@ with tab_pred:
             if not good.empty:
                 st.subheader('Candidatos experimentales según EV estimado')
                 st.dataframe(good[['jugador','prop','linea','lado','probabilidad','cuota_decimal','ev_unidad','alertas']],
-                             hide_index=True,use_container_width=True)
+                             hide_index=True,width='stretch')
     except Exception as e:
         st.error(f'No se pudo evaluar líneas: {e}')
 
@@ -185,7 +195,7 @@ with tab_test:
             st.json(summary)
             if len(bets):
                 st.line_chart(bets.set_index('fecha')['ganancia_acumulada'])
-                st.dataframe(bets,hide_index=True,use_container_width=True)
+                st.dataframe(bets,hide_index=True,width='stretch')
                 st.download_button('Descargar registro de apuestas (CSV)',bets.to_csv(index=False).encode('utf-8-sig'),
                                   'registro_backtest.csv','text/csv')
             if len(all_preds):
@@ -194,10 +204,10 @@ with tab_test:
             bias,calibration=analyze(all_preds)
             if not bias.empty:
                 st.subheader('Diagnóstico de errores por mercado')
-                st.dataframe(bias,hide_index=True,use_container_width=True)
+                st.dataframe(bias,hide_index=True,width='stretch')
             if not calibration.empty:
                 st.subheader('Calibración de probabilidades (deciles)')
-                st.dataframe(calibration,hide_index=True,use_container_width=True)
+                st.dataframe(calibration,hide_index=True,width='stretch')
             st.info('El backtest no incluye comisiones, cambios posteriores de cuota, límites de apuestas ni corrección por múltiples pruebas. No valida automáticamente el modelo.')
     except Exception as e:
         st.error(f'Backtest no disponible: {e}')
@@ -206,7 +216,7 @@ with tab_help:
     st.markdown('''
     **Uso fácil:** en la pestaña **Analizar jugador (fácil)**, elegí jugador, fecha, mercado, línea y escribí la(s) cuota(s). No hace falta preparar CSV para una sola prop.
 
-    **Paso 1:** Importá estadísticas reales o subí un CSV de game logs de NBA.
+    **Paso 1:** La base NBA real es compartida en GitHub; también podés subir un CSV propio.
 
     **Paso 2:** Prepará una tabla de líneas con `game_date, player_id, stat, line, odds_over, odds_under`.
     La `stat` admite `PTS`, `REB`, `AST`, `3PM`, `FG3M` y `PRA`. Podés añadir `minutes_expected`,
