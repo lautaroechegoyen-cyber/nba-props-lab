@@ -18,5 +18,5 @@ def test_app_reads_shared_data_without_network():
 def test_streamlit_app_smoke():
     pytest.importorskip('streamlit')
     from streamlit.testing.v1 import AppTest
-    at=AppTest.from_file('app.py',default_timeout=90).run()
+    at=AppTest.from_file(Path(__file__).resolve().parents[1] / 'app.py',default_timeout=90).run()
     assert not at.exception,[e.message for e in at.exception]
