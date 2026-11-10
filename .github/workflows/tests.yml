@@ -16,5 +16,5 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
       - run: pip install -r requirements-test.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q tests
       - run: python -m compileall -q app.py cli.py model.py fetch_nba.py shared_data.py tracker.py diagnostics.py make_demo.py
